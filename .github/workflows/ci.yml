@@ -40,15 +40,15 @@ jobs:
 
       - name: Lint with flake8
         working-directory: ./aws-ci_cd-pipeline-terraform
-        run: flake8 app/ --max-line-length=120 --exclude=app/tests/
+        run: flake8 app/ --max-line-length=120 --exclude=app/tests/,app/venv
 
       - name: Format check with black
         working-directory: ./aws-ci_cd-pipeline-terraform
         run: black --check app/
 
       - name: Run tests
-        working-directory: ./aws-ci_cd-pipeline-terraform/app
-        run: pytest tests/ -v --tb=short --junitxml=test-results.xml
+        working-directory: ./aws-ci_cd-pipeline-terraform
+        run: PYTHONPATH=./app pytest app/tests/ -v
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
