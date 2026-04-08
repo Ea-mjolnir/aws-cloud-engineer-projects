@@ -90,10 +90,18 @@ resource "aws_iam_role_policy" "github_actions" {
           "s3:ListBucket",
           "s3:DeleteObject",
           "s3:GetBucketPolicy",
+          "s3:PutBucketPolicy",
           "s3:GetBucketVersioning",
+          "s3:PutBucketVersioning",
           "s3:GetEncryptionConfiguration",
+          "s3:PutEncryptionConfiguration",
           "s3:GetBucketAcl",
-          "s3:GetBucketCors"
+          "s3:PutBucketAcl",
+          "s3:GetBucketCors",
+          "s3:PutBucketCors",
+          "s3:GetBucketWebsite",
+          "s3:GetBucketTagging",
+          "s3:PutBucketTagging"
         ]
         Resource = [
           "arn:aws:s3:::aws-ci-cd-pipeline-terraform-state",
@@ -108,9 +116,12 @@ resource "aws_iam_role_policy" "github_actions" {
           "dynamodb:GetItem",
           "dynamodb:PutItem",
           "dynamodb:DeleteItem",
+          "dynamodb:UpdateItem",
           "dynamodb:DescribeTable",
           "dynamodb:DescribeContinuousBackups",
-          "dynamodb:DescribeTimeToLive"
+          "dynamodb:DescribeTimeToLive",
+          "dynamodb:ListTagsOfResource",
+          "dynamodb:TagResource"
         ]
         Resource = "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/terraform-locks"
       },
