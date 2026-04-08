@@ -22,7 +22,7 @@ async def test_create_task_success(mock_dynamodb):
         response = await client.post(
             "/tasks",
             json={"title": "Test task", "priority": "HIGH"},
-            headers={"x-user-id": "user-123"}
+            headers={"x-user-id": "user-123"},
         )
 
     assert response.status_code == 201
@@ -35,9 +35,7 @@ async def test_create_task_missing_title(mock_dynamodb):
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         response = await client.post(
-            "/tasks",
-            json={"priority": "HIGH"},
-            headers={"x-user-id": "user-123"}
+            "/tasks", json={"priority": "HIGH"}, headers={"x-user-id": "user-123"}
         )
 
     assert response.status_code == 422
@@ -48,9 +46,6 @@ async def test_create_task_no_auth():
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        response = await client.post(
-            "/tasks",
-            json={"title": "Test task"}
-        )
+        response = await client.post("/tasks", json={"title": "Test task"})
 
     assert response.status_code == 422

@@ -21,7 +21,9 @@ async def health_check():
     overall_status = "healthy"
 
     try:
-        dynamodb = boto3.client("dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+        dynamodb = boto3.client(
+            "dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1")
+        )
         dynamodb.list_tables(Limit=1)
         checks["dynamodb"] = "healthy"
     except Exception as e:

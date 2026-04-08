@@ -11,7 +11,9 @@ from boto3.dynamodb.conditions import Key
 router = APIRouter()
 logger = structlog.get_logger()
 
-dynamodb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+dynamodb = boto3.resource(
+    "dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1")
+)
 
 
 def get_table():
@@ -36,7 +38,9 @@ class TaskUpdate(BaseModel):
 @router.post("/tasks", status_code=201)
 async def create_task(
     payload: TaskCreate,
-    x_user_id: str = Header(..., description="Authenticated user ID from upstream auth")
+    x_user_id: str = Header(
+        ..., description="Authenticated user ID from upstream auth"
+    ),
 ):
     task_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -62,20 +66,18 @@ async def create_task(
 
 
 @router.get("/tasks")
-async def list_tasks(
-    x_user_id: str = Header(...),
-    status: Optional[str] = None
-):
+async def list_tasks(x_user_id: str = Header(...), status: Optional[str] = None):
     if status:
         result = get_table().query(
             IndexName="StatusIndex",
             KeyConditionExpression=Key("GSI1PK").eq(f"STATUS#{status}"),
             FilterExpression="userId = :uid",
-            ExpressionAttributeValues={":uid": x_user_id}
+            ExpressionAttributeValues={":uid": x_user_id},
         )
     else:
         result = get_table().query(
-            KeyConditionExpression=Key("PK").eq(f"USER#{x_user_id}") & Key("SK").begins_with("TASK#")
+            KeyConditionExpression=Key("PK").eq(f"USER#{x_user_id}")
+            & Key("SK").begins_with("TASK#")
         )
 
     return {"tasks": result["Items"], "count": len(result["Items"])}
@@ -93,11 +95,7 @@ async def get_task(task_id: str, x_user_id: str = Header(...)):
 
 
 @router.put("/tasks/{task_id}")
-async def update_task(
-    task_id: str,
-    payload: TaskUpdate,
-    x_user_id: str = Header(...)
-):
+async def update_task(task_id: str, payload: TaskUpdate, x_user_id: str = Header(...)):
     updates = []
     expr_names = {"#upd": "updatedAt"}
     expr_values = {":upd": datetime.now(timezone.utc).isoformat()}
@@ -129,7 +127,7 @@ async def update_task(
             UpdateExpression="SET #upd = :upd, " + ", ".join(updates),
             ExpressionAttributeNames=expr_names,
             ExpressionAttributeValues=expr_values,
-            ConditionExpression="attribute_exists(PK)"
+            ConditionExpression="attribute_exists(PK)",
         )
     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -142,7 +140,7 @@ async def delete_task(task_id: str, x_user_id: str = Header(...)):
     try:
         get_table().delete_item(
             Key={"PK": f"USER#{x_user_id}", "SK": f"TASK#{task_id}"},
-            ConditionExpression="attribute_exists(PK)"
+            ConditionExpression="attribute_exists(PK)",
         )
     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
         raise HTTPException(status_code=404, detail="Task not found")
