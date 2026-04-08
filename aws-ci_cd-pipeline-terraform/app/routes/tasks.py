@@ -20,17 +20,17 @@ def get_table():
 
 
 class TaskCreate(BaseModel):
-    title:       str = Field(..., min_length=1, max_length=200)
+    title: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
-    priority:    Optional[str] = Field("MEDIUM", pattern="^(LOW|MEDIUM|HIGH|CRITICAL)$")
-    status:      Optional[str] = Field("PENDING", pattern="^(PENDING|IN_PROGRESS|DONE)$")
+    priority: Optional[str] = Field("MEDIUM", pattern="^(LOW|MEDIUM|HIGH|CRITICAL)$")
+    status: Optional[str] = Field("PENDING", pattern="^(PENDING|IN_PROGRESS|DONE)$")
 
 
 class TaskUpdate(BaseModel):
-    title:       Optional[str] = Field(None, min_length=1, max_length=200)
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
-    priority:    Optional[str] = Field(None, pattern="^(LOW|MEDIUM|HIGH|CRITICAL)$")
-    status:      Optional[str] = Field(None, pattern="^(PENDING|IN_PROGRESS|DONE)$")
+    priority: Optional[str] = Field(None, pattern="^(LOW|MEDIUM|HIGH|CRITICAL)$")
+    status: Optional[str] = Field(None, pattern="^(PENDING|IN_PROGRESS|DONE)$")
 
 
 @router.post("/tasks", status_code=201)
@@ -39,21 +39,21 @@ async def create_task(
     x_user_id: str = Header(..., description="Authenticated user ID from upstream auth")
 ):
     task_id = str(uuid.uuid4())
-    now     = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     item = {
-        "PK":          f"USER#{x_user_id}",
-        "SK":          f"TASK#{task_id}",
-        "GSI1PK":      f"STATUS#{payload.status}",
-        "GSI1SK":      f"CREATED#{now}",
-        "taskId":      task_id,
-        "userId":      x_user_id,
-        "title":       payload.title,
+        "PK": f"USER#{x_user_id}",
+        "SK": f"TASK#{task_id}",
+        "GSI1PK": f"STATUS#{payload.status}",
+        "GSI1SK": f"CREATED#{now}",
+        "taskId": task_id,
+        "userId": x_user_id,
+        "title": payload.title,
         "description": payload.description or "",
-        "priority":    payload.priority,
-        "status":      payload.status,
-        "createdAt":   now,
-        "updatedAt":   now,
+        "priority": payload.priority,
+        "status": payload.status,
+        "createdAt": now,
+        "updatedAt": now,
     }
 
     get_table().put_item(Item=item)
@@ -68,15 +68,14 @@ async def list_tasks(
 ):
     if status:
         result = get_table().query(
-            IndexName                 = "StatusIndex",
-            KeyConditionExpression    = Key("GSI1PK").eq(f"STATUS#{status}"),
-            FilterExpression          = "userId = :uid",
-            ExpressionAttributeValues = {":uid": x_user_id}
+            IndexName="StatusIndex",
+            KeyConditionExpression=Key("GSI1PK").eq(f"STATUS#{status}"),
+            FilterExpression="userId = :uid",
+            ExpressionAttributeValues={":uid": x_user_id}
         )
     else:
         result = get_table().query(
-            KeyConditionExpression = Key("PK").eq(f"USER#{x_user_id}")
-                                   & Key("SK").begins_with("TASK#")
+            KeyConditionExpression=Key("PK").eq(f"USER#{x_user_id}") & Key("SK").begins_with("TASK#")
         )
 
     return {"tasks": result["Items"], "count": len(result["Items"])}
@@ -99,8 +98,8 @@ async def update_task(
     payload: TaskUpdate,
     x_user_id: str = Header(...)
 ):
-    updates     = []
-    expr_names  = {"#upd": "updatedAt"}
+    updates = []
+    expr_names = {"#upd": "updatedAt"}
     expr_values = {":upd": datetime.now(timezone.utc).isoformat()}
 
     if payload.title is not None:
@@ -109,7 +108,7 @@ async def update_task(
 
     if payload.status is not None:
         updates.append("#st = :status, GSI1PK = :gsi1pk")
-        expr_names["#st"]      = "status"
+        expr_names["#st"] = "status"
         expr_values[":status"] = payload.status
         expr_values[":gsi1pk"] = f"STATUS#{payload.status}"
 
@@ -126,11 +125,11 @@ async def update_task(
 
     try:
         get_table().update_item(
-            Key                       = {"PK": f"USER#{x_user_id}", "SK": f"TASK#{task_id}"},
-            UpdateExpression          = "SET #upd = :upd, " + ", ".join(updates),
-            ExpressionAttributeNames  = expr_names,
-            ExpressionAttributeValues = expr_values,
-            ConditionExpression       = "attribute_exists(PK)"
+            Key={"PK": f"USER#{x_user_id}", "SK": f"TASK#{task_id}"},
+            UpdateExpression="SET #upd = :upd, " + ", ".join(updates),
+            ExpressionAttributeNames=expr_names,
+            ExpressionAttributeValues=expr_values,
+            ConditionExpression="attribute_exists(PK)"
         )
     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -142,8 +141,8 @@ async def update_task(
 async def delete_task(task_id: str, x_user_id: str = Header(...)):
     try:
         get_table().delete_item(
-            Key               = {"PK": f"USER#{x_user_id}", "SK": f"TASK#{task_id}"},
-            ConditionExpression = "attribute_exists(PK)"
+            Key={"PK": f"USER#{x_user_id}", "SK": f"TASK#{task_id}"},
+            ConditionExpression="attribute_exists(PK)"
         )
     except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
         raise HTTPException(status_code=404, detail="Task not found")

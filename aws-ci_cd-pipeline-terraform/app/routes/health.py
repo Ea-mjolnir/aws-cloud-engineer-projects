@@ -8,23 +8,18 @@ router = APIRouter()
 
 
 class HealthResponse(BaseModel):
-    status:      str
-    version:     str
+    status: str
+    version: str
     environment: str
-    timestamp:   str
-    checks:      dict
+    timestamp: str
+    checks: dict
 
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check():
-    """
-    Deep health check — verifies all downstream dependencies.
-    ALB uses /health to decide whether this instance is healthy.
-    """
     checks = {}
     overall_status = "healthy"
 
-    # Check DynamoDB connectivity
     try:
         dynamodb = boto3.client("dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1"))
         dynamodb.list_tables(Limit=1)
@@ -34,21 +29,19 @@ async def health_check():
         overall_status = "degraded"
 
     return HealthResponse(
-        status      = overall_status,
-        version     = os.environ.get("APP_VERSION", "unknown"),
-        environment = os.environ.get("ENVIRONMENT", "unknown"),
-        timestamp   = datetime.now(timezone.utc).isoformat(),
-        checks      = checks,
+        status=overall_status,
+        version=os.environ.get("APP_VERSION", "unknown"),
+        environment=os.environ.get("ENVIRONMENT", "unknown"),
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        checks=checks,
     )
 
 
 @router.get("/health/live")
 async def liveness():
-    """Kubernetes/ECS liveness probe — is the process alive?"""
     return {"status": "alive"}
 
 
 @router.get("/health/ready")
 async def readiness():
-    """Kubernetes/ECS readiness probe — is the app ready to serve traffic?"""
     return {"status": "ready"}

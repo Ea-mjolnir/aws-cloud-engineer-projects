@@ -20,7 +20,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         request_id = str(uuid.uuid4())
         start_time = time.time()
 
-        # Attach request ID to all logs in this request
         with structlog.contextvars.bound_contextvars(
             request_id=request_id,
             method=request.method,

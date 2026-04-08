@@ -3,7 +3,7 @@ resource "aws_ecs_cluster" "main" {
 
   setting {
     name  = "containerInsights"
-    value = "enabled"   # Detailed ECS metrics in CloudWatch
+    value = "enabled" # Detailed ECS metrics in CloudWatch
   }
 }
 
@@ -14,7 +14,7 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
   default_capacity_provider_strategy {
     capacity_provider = "FARGATE"
     weight            = 1
-    base              = 1   # Always keep 1 FARGATE task (not spot) for stability
+    base              = 1 # Always keep 1 FARGATE task (not spot) for stability
   }
 }
 
@@ -44,8 +44,8 @@ resource "aws_ecs_task_definition" "app" {
     }]
 
     environment = [
-      { name = "ENVIRONMENT",    value = var.environment },
-      { name = "AWS_REGION",     value = var.aws_region },
+      { name = "ENVIRONMENT", value = var.environment },
+      { name = "AWS_REGION", value = var.aws_region },
       { name = "DYNAMODB_TABLE", value = var.dynamodb_table }
     ]
 

@@ -1,12 +1,12 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch, MagicMock
-from app.main import app
+from main import app
 
 
 @pytest.fixture
 def mock_dynamodb():
-    with patch("app.routes.tasks.get_table") as mock:
+    with patch("routes.tasks.get_table") as mock:
         table = MagicMock()
         mock.return_value = table
         yield table
@@ -40,7 +40,7 @@ async def test_create_task_missing_title(mock_dynamodb):
             headers={"x-user-id": "user-123"}
         )
 
-    assert response.status_code == 422  # Validation error
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -51,7 +51,6 @@ async def test_create_task_no_auth():
         response = await client.post(
             "/tasks",
             json={"title": "Test task"}
-            # Missing x-user-id header
         )
 
     assert response.status_code == 422

@@ -3,10 +3,10 @@
 
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "aws-ci-cd-pipeline-terraform-state"
-  
+
   # Allows deleting bucket even if it contains state files
   force_destroy = true
-  
+
   tags = {
     Name        = "Terraform State Bucket"
     Environment = "cicd-pipeline"

@@ -29,12 +29,13 @@ COPY --from=builder /install /usr/local
 COPY --chown=appuser:appuser . .
 
 # Security hardening
-RUN chmod -R 550 /app && \
+RUN chown -R appuser:appuser /app && \
+    chmod -R 755 /app && \
     find /app -type f -name "*.py" -exec chmod 440 {} \;
 
 USER appuser
 
-# Metadata labels — visible in ECR and ECS
+# Metadata labels
 ARG APP_VERSION=unknown
 ARG BUILD_DATE=unknown
 ARG GIT_COMMIT=unknown
@@ -54,7 +55,8 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health/live')"
 
-CMD ["uvicorn", "app.main:app", \
+# main.py is in the current directory (/app), not in an 'app' subdirectory
+CMD ["uvicorn", "main:app", \
      "--host", "0.0.0.0", \
      "--port", "8080", \
      "--workers", "2", \

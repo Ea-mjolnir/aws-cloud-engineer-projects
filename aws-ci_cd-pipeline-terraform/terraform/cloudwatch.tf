@@ -36,11 +36,11 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric"
         properties = {
-          title    = "ECS CPU & Memory"
-          region   = var.aws_region
-          period   = 60
-          metrics  = [
-            ["AWS/ECS", "CPUUtilization",    "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.app.name, { stat = "Average" }],
+          title  = "ECS CPU & Memory"
+          region = var.aws_region
+          period = 60
+          metrics = [
+            ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.app.name, { stat = "Average" }],
             ["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.app.name, { stat = "Average" }]
           ]
         }
@@ -48,11 +48,11 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type = "metric"
         properties = {
-          title    = "ALB Request Count & Latency"
-          region   = var.aws_region
-          period   = 60
-          metrics  = [
-            ["AWS/ApplicationELB", "RequestCount",       "LoadBalancer", aws_lb.main.arn_suffix, { stat = "Sum" }],
+          title  = "ALB Request Count & Latency"
+          region = var.aws_region
+          period = 60
+          metrics = [
+            ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", aws_lb.main.arn_suffix, { stat = "Sum" }],
             ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", aws_lb.main.arn_suffix, { stat = "Average" }]
           ]
         }
