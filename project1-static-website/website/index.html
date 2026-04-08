@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud Engineer | AWS Portfolio</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .card {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+      max-width: 600px;
+      margin: 20px;
+      padding: 40px;
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+    .card:hover { transform: translateY(-5px); }
+    h1 {
+      color: #232f3e;
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+    }
+    .badge {
+      background: linear-gradient(135deg, #ff9900, #ff6600);
+      color: white;
+      padding: 6px 16px;
+      border-radius: 50px;
+      font-size: 14px;
+      font-weight: 600;
+      display: inline-block;
+      margin: 15px 0;
+    }
+    .tech-stack {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin: 25px 0;
+    }
+    .tech {
+      background: #f0f0f0;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #555;
+    }
+    p { color: #666; line-height: 1.6; margin: 15px 0; }
+    .icon { font-size: 50px; margin-bottom: 20px; }
+    hr { margin: 20px 0; border: none; height: 1px; background: #e0e0e0; }
+    .footer { font-size: 12px; color: #999; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">☁️</div>
+    <h1>Cloud Engineering Portfolio</h1>
+    <div class="badge">🚀 Deployed via Terraform</div>
+    <div class="tech-stack">
+      <span class="tech">AWS S3</span>
+      <span class="tech">CloudFront CDN</span>
+      <span class="tech">Route 53</span>
+      <span class="tech">Terraform IaC</span>
+      <span class="tech">HTTPS</span>
+    </div>
+    <p>This static website is hosted on <strong>Amazon S3</strong>, delivered globally via <strong>CloudFront CDN</strong>, and secured with <strong>HTTPS</strong> — all provisioned as code using <strong>Terraform</strong>.</p>
+    <hr>
+    <p>✅ No manual console clicks<br>✅ Fully automated infrastructure<br>✅ Git-tracked, reproducible builds</p>
+    <div class="footer">Part of my AWS Cloud Engineer 3-Month Roadmap | Project 1</div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Terraform
+*.tfstate*
+*.tfvars
+.terraform/
+terraform.tfplan
+
+# Local
+*.log
+.terraform.lock.hcl
+override.tf
