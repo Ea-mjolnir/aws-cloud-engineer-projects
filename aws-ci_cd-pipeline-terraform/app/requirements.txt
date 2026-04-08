@@ -5,4 +5,4 @@ aws-xray-sdk==2.12.1
 structlog==24.1.0
 pydantic==2.7.0
 pydantic-settings==2.2.1
-starlette==0.38.6
+starlette==0.40.0

@@ -8,9 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
+# Only copy production requirements
 COPY requirements.txt .
 
-# Install to a local directory so we can copy cleanly to final stage
+# Install ONLY production dependencies
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 
@@ -22,7 +23,7 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 WORKDIR /app
 
-# Copy only built packages from builder stage — no gcc, no build tools
+# Copy only built packages from builder stage — no dev tools
 COPY --from=builder /install /usr/local
 
 # Copy application code
@@ -55,7 +56,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health/live')"
 
-# main.py is in the current directory (/app), not in an 'app' subdirectory
 CMD ["uvicorn", "main:app", \
      "--host", "0.0.0.0", \
      "--port", "8080", \
