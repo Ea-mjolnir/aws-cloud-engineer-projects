@@ -15,7 +15,7 @@ resource "aws_iam_role" "github_actions" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
+        Effect    = "Allow"
         Principal = {
           Federated = aws_iam_openid_connect_provider.github.arn
         }
@@ -33,7 +33,7 @@ resource "aws_iam_role" "github_actions" {
   })
 }
 
-# Main policy for GitHub Actions
+# Main policy for GitHub Actions - Full permissions for CI/CD
 resource "aws_iam_role_policy" "github_actions" {
   name = "${var.project_name}-github-actions-policy"
   role = aws_iam_role.github_actions.id
@@ -41,12 +41,14 @@ resource "aws_iam_role_policy" "github_actions" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # ECR Authentication
       {
         Sid      = "ECRAuth"
         Effect   = "Allow"
         Action   = ["ecr:GetAuthorizationToken"]
         Resource = "*"
       },
+      # ECR Operations
       {
         Sid    = "ECROperations"
         Effect = "Allow"
@@ -63,6 +65,7 @@ resource "aws_iam_role_policy" "github_actions" {
         ]
         Resource = aws_ecr_repository.app.arn
       },
+      # ECS Deployment
       {
         Sid    = "ECSDeployment"
         Effect = "Allow"
@@ -77,8 +80,9 @@ resource "aws_iam_role_policy" "github_actions" {
         ]
         Resource = "*"
       },
+      # S3 State Management - Full permissions
       {
-        Sid    = "TerraformState"
+        Sid    = "S3StateManagement"
         Effect = "Allow"
         Action = [
           "s3:GetObject",
@@ -88,25 +92,29 @@ resource "aws_iam_role_policy" "github_actions" {
           "s3:GetBucketPolicy",
           "s3:GetBucketVersioning",
           "s3:GetEncryptionConfiguration",
-          "s3:GetBucketAcl"
+          "s3:GetBucketAcl",
+          "s3:GetBucketCors"
         ]
         Resource = [
           "arn:aws:s3:::aws-ci-cd-pipeline-terraform-state",
           "arn:aws:s3:::aws-ci-cd-pipeline-terraform-state/*"
         ]
       },
+      # DynamoDB Lock Table Management - Full permissions
       {
-        Sid    = "TerraformLock"
-        Effect = "Allow"
-        Action = [
+        Sid      = "DynamoDBLockManagement"
+        Effect   = "Allow"
+        Action   = [
           "dynamodb:GetItem",
           "dynamodb:PutItem",
           "dynamodb:DeleteItem",
           "dynamodb:DescribeTable",
-          "dynamodb:DescribeContinuousBackups"
+          "dynamodb:DescribeContinuousBackups",
+          "dynamodb:DescribeTimeToLive"
         ]
         Resource = "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/terraform-locks"
       },
+      # IAM Read Operations
       {
         Sid    = "IAMReadOnly"
         Effect = "Allow"
@@ -119,6 +127,7 @@ resource "aws_iam_role_policy" "github_actions" {
         ]
         Resource = "*"
       },
+      # Full Infrastructure Permissions for Terraform
       {
         Sid    = "TerraformPermissions"
         Effect = "Allow"
@@ -154,7 +163,7 @@ resource "aws_iam_role" "ecs_execution" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
+        Effect    = "Allow"
         Principal = {
           Service = "ecs-tasks.amazonaws.com"
         }
@@ -177,7 +186,7 @@ resource "aws_iam_role" "ecs_task" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
+        Effect    = "Allow"
         Principal = {
           Service = "ecs-tasks.amazonaws.com"
         }
