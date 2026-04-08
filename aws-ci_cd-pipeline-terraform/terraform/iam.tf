@@ -15,7 +15,7 @@ resource "aws_iam_role" "github_actions" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
+        Effect    = "Allow"
         Principal = {
           Federated = aws_iam_openid_connect_provider.github.arn
         }
@@ -33,6 +33,7 @@ resource "aws_iam_role" "github_actions" {
   })
 }
 
+# Main policy for GitHub Actions
 resource "aws_iam_role_policy" "github_actions" {
   name = "${var.project_name}-github-actions-policy"
   role = aws_iam_role.github_actions.id
@@ -83,7 +84,10 @@ resource "aws_iam_role_policy" "github_actions" {
           "s3:GetObject",
           "s3:PutObject",
           "s3:ListBucket",
-          "s3:DeleteObject"
+          "s3:DeleteObject",
+          "s3:GetBucketPolicy",
+          "s3:GetBucketVersioning",
+          "s3:GetEncryptionConfiguration"
         ]
         Resource = [
           "arn:aws:s3:::aws-ci-cd-pipeline-terraform-state",
@@ -93,8 +97,25 @@ resource "aws_iam_role_policy" "github_actions" {
       {
         Sid      = "TerraformLock"
         Effect   = "Allow"
-        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
+        Action   = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:DescribeTable"
+        ]
         Resource = "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/terraform-locks"
+      },
+      {
+        Sid    = "IAMReadOnly"
+        Effect = "Allow"
+        Action = [
+          "iam:GetOpenIDConnectProvider",
+          "iam:ListRolePolicies",
+          "iam:GetRolePolicy",
+          "iam:GetRole",
+          "iam:ListAttachedRolePolicies"
+        ]
+        Resource = "*"
       },
       {
         Sid    = "TerraformPermissions"
@@ -131,7 +152,7 @@ resource "aws_iam_role" "ecs_execution" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
+        Effect    = "Allow"
         Principal = {
           Service = "ecs-tasks.amazonaws.com"
         }
@@ -154,7 +175,7 @@ resource "aws_iam_role" "ecs_task" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
+        Effect    = "Allow"
         Principal = {
           Service = "ecs-tasks.amazonaws.com"
         }
