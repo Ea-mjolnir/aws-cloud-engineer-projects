@@ -5,3 +5,4 @@
 # Trigger pipeline after workflow fix
 # OIDC trust policy fixed
 # IAM permissions fixed
+# OIDC trust policy updated to correct repo
