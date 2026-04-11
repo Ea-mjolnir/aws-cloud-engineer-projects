@@ -34,8 +34,8 @@ ECR_REPO=$(aws ecs describe-task-definition \
 NEW_IMAGE="${ECR_REPO}:${IMAGE_TAG}"
 echo "🐳 New image: $NEW_IMAGE"
 
-# Register new task definition with updated image
-NEW_TASK_DEF=$(aws ecs describe-task-definition \
+# Create modified task definition JSON (without piping directly to AWS CLI)
+TASK_DEF_JSON=$(aws ecs describe-task-definition \
   --task-definition "$CURRENT_TASK_DEF" \
   --region "$REGION" \
   --query 'taskDefinition' \
@@ -44,12 +44,20 @@ NEW_TASK_DEF=$(aws ecs describe-task-definition \
      '.containerDefinitions[0].image = $IMAGE |
       del(.taskDefinitionArn, .revision, .status,
           .requiresAttributes, .placementConstraints,
-          .compatibilities, .registeredAt, .registeredBy)' | \
-  aws ecs register-task-definition \
-    --region "$REGION" \
-    --cli-input-json /dev/stdin \
-    --query 'taskDefinition.taskDefinitionArn' \
-    --output text)
+          .compatibilities, .registeredAt, .registeredBy)')
+
+# Save to temp file
+echo "$TASK_DEF_JSON" > /tmp/new-task-def.json
+
+# Register new task definition using file input (more reliable than stdin)
+NEW_TASK_DEF=$(aws ecs register-task-definition \
+  --region "$REGION" \
+  --cli-input-json file:///tmp/new-task-def.json \
+  --query 'taskDefinition.taskDefinitionArn' \
+  --output text)
+
+# Clean up temp file
+rm -f /tmp/new-task-def.json
 
 echo "📝 Registered new task definition: $NEW_TASK_DEF"
 
