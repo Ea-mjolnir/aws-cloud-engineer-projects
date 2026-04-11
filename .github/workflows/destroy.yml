@@ -32,7 +32,7 @@ jobs:
           role-session-name: github-actions-destroy
 
       - name: Terraform Destroy
-        working-directory: terraform/
+        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
         run: |
           terraform init
           terraform destroy \

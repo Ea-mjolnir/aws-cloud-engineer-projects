@@ -8,7 +8,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Only copy production requirements
 COPY requirements.txt .
 
 # Install ONLY production dependencies
@@ -22,6 +21,10 @@ FROM python:3.12-slim AS production
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 WORKDIR /app
+
+# Upgrade OpenSSL to patched version (CVE-2026-28390)
+RUN apt-get update && apt-get upgrade -y openssl libssl3t64 openssl-provider-legacy \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy only built packages from builder stage — no dev tools
 COPY --from=builder /install /usr/local

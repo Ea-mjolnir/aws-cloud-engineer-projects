@@ -73,11 +73,6 @@ jobs:
       - name: Push image to ECR
         run: docker push ${{ steps.meta.outputs.uri }}
 
-      - name: Tag as latest
-        run: |
-          docker tag ${{ steps.meta.outputs.uri }} \
-            ${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPO }}:latest
-          docker push ${{ secrets.ECR_REGISTRY }}/${{ env.ECR_REPO }}:latest
 
   terraform-apply:
     name: Terraform Apply

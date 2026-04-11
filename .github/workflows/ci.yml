@@ -44,11 +44,11 @@ jobs:
 
       - name: Format check with black
         working-directory: ./aws-ci_cd-pipeline-terraform
-        run: black --check app/
+        run: black --check app/ --exclude 'app/venv|app/__pycache__'
 
       - name: Run tests
         working-directory: ./aws-ci_cd-pipeline-terraform
-        run: PYTHONPATH=./app pytest app/tests/ -v
+        run: PYTHONPATH=./app pytest app/tests/ -v --junitxml=app/test-results.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -76,7 +76,7 @@ jobs:
         working-directory: ./aws-ci_cd-pipeline-terraform
         run: |
           pip install safety
-          safety check -r app/requirements.txt --json > safety-report.json || true
+          safety scan -r app/requirements.txt --output json > safety-report.json || true
           cat safety-report.json
 
       - name: Terraform security — tfsec
