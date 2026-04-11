@@ -84,27 +84,7 @@ resource "aws_iam_role_policy" "github_actions" {
       {
         Sid    = "S3StateManagement"
         Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:ListBucket",
-          "s3:DeleteObject",
-          "s3:GetBucketPolicy",
-          "s3:PutBucketPolicy",
-          "s3:GetBucketVersioning",
-          "s3:PutBucketVersioning",
-          "s3:GetEncryptionConfiguration",
-          "s3:PutEncryptionConfiguration",
-          "s3:GetBucketAcl",
-          "s3:PutBucketAcl",
-          "s3:GetBucketCors",
-          "s3:PutBucketCors",
-          "s3:GetBucketWebsite",
-          "s3:GetBucketTagging",
-          "s3:PutBucketTagging",
-          "s3:GetBucketAccelerateConfiguration",
-          "s3:GetAccelerateConfiguration",
-        ]
+        Action = ["s3:*"]
         Resource = [
           "arn:aws:s3:::aws-ci-cd-pipeline-terraform-state",
           "arn:aws:s3:::aws-ci-cd-pipeline-terraform-state/*"
@@ -112,19 +92,9 @@ resource "aws_iam_role_policy" "github_actions" {
       },
       # DynamoDB Lock Table Management - Full permissions
       {
-        Sid      = "DynamoDBLockManagement"
-        Effect   = "Allow"
-        Action   = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:DescribeTable",
-          "dynamodb:DescribeContinuousBackups",
-          "dynamodb:DescribeTimeToLive",
-          "dynamodb:ListTagsOfResource",
-          "dynamodb:TagResource"
-        ]
+        Sid    = "DynamoDBLockManagement"
+        Effect = "Allow"
+        Action = ["dynamodb:*"]
         Resource = "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/terraform-locks"
       },
       # IAM Read Operations
