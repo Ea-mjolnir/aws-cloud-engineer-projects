@@ -125,6 +125,7 @@ jobs:
         working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
         run: |
           terraform plan \
+            -var="github_repo=${{ github.event.repository.name }}" \
             -var="github_org=${{ github.repository_owner }}" \
             -out=tfplan \
             -no-color 2>&1 | tee plan-output.txt

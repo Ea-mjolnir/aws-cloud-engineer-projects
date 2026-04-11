@@ -103,6 +103,7 @@ resource "aws_iam_role_policy" "github_actions" {
           "s3:GetBucketTagging",
           "s3:PutBucketTagging",
           "s3:GetBucketAccelerateConfiguration"
+          "s3:GetAccelerateConfiguration",
         ]
         Resource = [
           "arn:aws:s3:::aws-ci-cd-pipeline-terraform-state",
