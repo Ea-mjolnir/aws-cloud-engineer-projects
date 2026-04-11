@@ -102,7 +102,7 @@ resource "aws_iam_role_policy" "github_actions" {
           "s3:GetBucketWebsite",
           "s3:GetBucketTagging",
           "s3:PutBucketTagging",
-          "s3:GetBucketAccelerateConfiguration"
+          "s3:GetBucketAccelerateConfiguration",
           "s3:GetAccelerateConfiguration",
         ]
         Resource = [
