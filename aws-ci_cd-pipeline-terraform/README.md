@@ -6,3 +6,4 @@
 # OIDC trust policy fixed
 # IAM permissions fixed
 # OIDC trust policy updated to correct repo
+# Blue-green deploy script fixed
