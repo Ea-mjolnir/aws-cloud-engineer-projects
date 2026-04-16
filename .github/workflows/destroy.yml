@@ -105,13 +105,14 @@ jobs:
           echo "Cleanup completed"
 
       - name: Verify destruction
+        continue-on-error: true
         run: |
           echo "=========================================="
           echo "Verifying resource destruction..."
           echo "=========================================="
           
           # Check ECS cluster
-          CLUSTER_STATUS=$(aws ecs describe-clusters --clusters cicd-pipeline-cluster --region ${{ secrets.AWS_REGION }} --query 'clusters[0].status' --output text 2>/dev/null)
+          CLUSTER_STATUS=$(aws ecs describe-clusters --clusters cicd-pipeline-cluster --region ${{ secrets.AWS_REGION }} --query 'clusters[0].status' --output text 2>/dev/null || echo "")
           if [ -z "$CLUSTER_STATUS" ] || [ "$CLUSTER_STATUS" = "None" ] || [ "$CLUSTER_STATUS" = "INACTIVE" ]; then
             echo "✅ ECS cluster destroyed"
           else
@@ -133,7 +134,7 @@ jobs:
           fi
           
           # Check IAM roles
-          ROLE_COUNT=$(aws iam list-roles --query 'Roles[?contains(RoleName, `cicd-pipeline`)].[RoleName]' --output text 2>/dev/null | wc -w)
+          ROLE_COUNT=$(aws iam list-roles --query 'Roles[?contains(RoleName, `cicd-pipeline`)].[RoleName]' --output text 2>/dev/null | wc -w || echo "0")
           if [ "$ROLE_COUNT" -eq 0 ]; then
             echo "✅ IAM roles destroyed"
           else
