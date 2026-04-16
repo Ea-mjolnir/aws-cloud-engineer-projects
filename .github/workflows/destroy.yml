@@ -110,30 +110,34 @@ jobs:
           echo "Verifying resource destruction..."
           echo "=========================================="
           
-          CLUSTER_EXISTS=$(aws ecs describe-clusters --clusters cicd-pipeline-cluster --region ${{ secrets.AWS_REGION }} 2>/dev/null | grep -c "ACTIVE" || echo "0")
-          if [ "$CLUSTER_EXISTS" -eq 0 ]; then
+          # Check ECS cluster
+          CLUSTER_STATUS=$(aws ecs describe-clusters --clusters cicd-pipeline-cluster --region ${{ secrets.AWS_REGION }} --query 'clusters[0].status' --output text 2>/dev/null)
+          if [ -z "$CLUSTER_STATUS" ] || [ "$CLUSTER_STATUS" = "None" ] || [ "$CLUSTER_STATUS" = "INACTIVE" ]; then
             echo "✅ ECS cluster destroyed"
           else
-            echo "⚠️ ECS cluster still exists"
+            echo "⚠️ ECS cluster still exists: $CLUSTER_STATUS"
           fi
           
+          # Check S3 bucket
           if aws s3 ls s3://aws-ci-cd-pipeline-terraform-state --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
             echo "⚠️ S3 bucket still exists"
           else
             echo "✅ S3 bucket destroyed"
           fi
           
+          # Check DynamoDB
           if aws dynamodb describe-table --table-name terraform-locks --region ${{ secrets.AWS_REGION }} 2>/dev/null | grep -q "TableStatus"; then
             echo "⚠️ DynamoDB table still exists"
           else
             echo "✅ DynamoDB table destroyed"
           fi
           
-          ROLES_EXIST=$(aws iam list-roles --query 'Roles[?contains(RoleName, `cicd-pipeline`)].[RoleName]' --output text 2>/dev/null | wc -l)
-          if [ "$ROLES_EXIST" -eq 0 ]; then
+          # Check IAM roles
+          ROLE_COUNT=$(aws iam list-roles --query 'Roles[?contains(RoleName, `cicd-pipeline`)].[RoleName]' --output text 2>/dev/null | wc -w)
+          if [ "$ROLE_COUNT" -eq 0 ]; then
             echo "✅ IAM roles destroyed"
           else
-            echo "⚠️ IAM roles still exist"
+            echo "⚠️ IAM roles still exist: $ROLE_COUNT role(s) found"
           fi
           
           echo "=========================================="
