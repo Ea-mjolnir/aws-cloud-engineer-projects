@@ -31,70 +31,78 @@ jobs:
           aws-region:        ${{ secrets.AWS_REGION }}
           role-session-name: github-actions-destroy
 
-      - name: Terraform Destroy (with backend recovery)
+      - name: Check if S3 bucket exists
+        id: check_bucket
         working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        continue-on-error: true
         run: |
-          # Recreate backend configuration to allow destroy to work
+          if aws s3 ls s3://aws-ci-cd-pipeline-terraform-state --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
+            echo "bucket_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "bucket_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Destroy (with backend recovery)
+        if: steps.check_bucket.outputs.bucket_exists == 'true'
+        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
+        run: |
           terraform init -reconfigure
           
-          # Force remove the S3 bucket from state if it doesn't exist
           terraform state rm aws_s3_bucket.terraform_state 2>/dev/null || true
           terraform state rm aws_s3_bucket_versioning.terraform_state 2>/dev/null || true
           terraform state rm aws_s3_bucket_server_side_encryption_configuration.terraform_state 2>/dev/null || true
           terraform state rm aws_dynamodb_table.terraform_locks 2>/dev/null || true
           
-          # Destroy remaining resources
           terraform destroy \
             -var="github_org=${{ github.repository_owner }}" \
             -var="github_repo=${{ github.event.repository.name }}" \
             -auto-approve \
-            -no-color || true
+            -no-color
           
-          # Clean up local state files
           rm -f terraform.tfstate* 2>/dev/null || true
+
+      - name: Skip Terraform Destroy (bucket already deleted)
+        if: steps.check_bucket.outputs.bucket_exists == 'false'
+        run: |
+          echo "S3 bucket already deleted. Skipping Terraform destroy."
 
       - name: Manual cleanup of remaining resources
         run: |
-          echo "Performing manual cleanup of any remaining resources..."
+          echo "Performing cleanup of any remaining resources..."
           
-          # Delete ECS service (force)
           aws ecs delete-service \
             --cluster cicd-pipeline-cluster \
             --service cicd-pipeline-api \
             --force \
             --region ${{ secrets.AWS_REGION }} \
-            2>/dev/null || echo "Service already deleted or not found"
+            2>/dev/null || true
           
-          # Wait for service deletion
           sleep 10
           
-          # Delete ECS cluster
           aws ecs delete-cluster \
             --cluster cicd-pipeline-cluster \
             --region ${{ secrets.AWS_REGION }} \
-            2>/dev/null || echo "Cluster already deleted or not found"
+            2>/dev/null || true
           
-          # Delete IAM roles
           for role in cicd-pipeline-github-actions cicd-pipeline-ecs-execution cicd-pipeline-ecs-task; do
-            # Detach policies first
             for policy in $(aws iam list-attached-role-policies --role-name $role --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null); do
               aws iam detach-role-policy --role-name $role --policy-arn $policy 2>/dev/null || true
             done
-            # Delete inline policies
             for policy in $(aws iam list-role-policies --role-name $role --query 'PolicyNames[]' --output text 2>/dev/null); do
               aws iam delete-role-policy --role-name $role --policy-name $policy 2>/dev/null || true
             done
-            # Delete the role
-            aws iam delete-role --role-name $role 2>/dev/null || echo "Role $role already deleted or not found"
+            aws iam delete-role --role-name $role 2>/dev/null || true
           done
           
-          # Delete OIDC provider
           aws iam delete-open-id-connect-provider \
             --open-id-connect-provider-arn arn:aws:iam::288528696055:oidc-provider/token.actions.githubusercontent.com \
-            2>/dev/null || echo "OIDC provider already deleted or not found"
+            2>/dev/null || true
           
-          echo "Manual cleanup completed"
+          aws logs delete-log-group \
+            --log-group-name /ecs/cicd-pipeline \
+            --region ${{ secrets.AWS_REGION }} \
+            2>/dev/null || true
+          
+          echo "Cleanup completed"
 
       - name: Verify destruction
         run: |
@@ -102,25 +110,30 @@ jobs:
           echo "Verifying resource destruction..."
           echo "=========================================="
           
-          # Check cluster
-          if aws ecs describe-clusters --clusters cicd-pipeline-cluster --region ${{ secrets.AWS_REGION }} 2>/dev/null | grep -q "ACTIVE"; then
-            echo "⚠️ ECS cluster still exists"
-          else
+          CLUSTER_EXISTS=$(aws ecs describe-clusters --clusters cicd-pipeline-cluster --region ${{ secrets.AWS_REGION }} 2>/dev/null | grep -c "ACTIVE" || echo "0")
+          if [ "$CLUSTER_EXISTS" -eq 0 ]; then
             echo "✅ ECS cluster destroyed"
+          else
+            echo "⚠️ ECS cluster still exists"
           fi
           
-          # Check S3 bucket
           if aws s3 ls s3://aws-ci-cd-pipeline-terraform-state --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
             echo "⚠️ S3 bucket still exists"
           else
             echo "✅ S3 bucket destroyed"
           fi
           
-          # Check DynamoDB
           if aws dynamodb describe-table --table-name terraform-locks --region ${{ secrets.AWS_REGION }} 2>/dev/null | grep -q "TableStatus"; then
             echo "⚠️ DynamoDB table still exists"
           else
             echo "✅ DynamoDB table destroyed"
+          fi
+          
+          ROLES_EXIST=$(aws iam list-roles --query 'Roles[?contains(RoleName, `cicd-pipeline`)].[RoleName]' --output text 2>/dev/null | wc -l)
+          if [ "$ROLES_EXIST" -eq 0 ]; then
+            echo "✅ IAM roles destroyed"
+          else
+            echo "⚠️ IAM roles still exist"
           fi
           
           echo "=========================================="
