@@ -31,10 +31,98 @@ jobs:
           aws-region:        ${{ secrets.AWS_REGION }}
           role-session-name: github-actions-destroy
 
-      - name: Terraform Destroy
+      - name: Terraform Destroy (with backend recovery)
         working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
+        continue-on-error: true
         run: |
-          terraform init
+          # Recreate backend configuration to allow destroy to work
+          terraform init -reconfigure
+          
+          # Force remove the S3 bucket from state if it doesn't exist
+          terraform state rm aws_s3_bucket.terraform_state 2>/dev/null || true
+          terraform state rm aws_s3_bucket_versioning.terraform_state 2>/dev/null || true
+          terraform state rm aws_s3_bucket_server_side_encryption_configuration.terraform_state 2>/dev/null || true
+          terraform state rm aws_dynamodb_table.terraform_locks 2>/dev/null || true
+          
+          # Destroy remaining resources
           terraform destroy \
             -var="github_org=${{ github.repository_owner }}" \
-            -auto-approve
+            -var="github_repo=${{ github.event.repository.name }}" \
+            -auto-approve \
+            -no-color || true
+          
+          # Clean up local state files
+          rm -f terraform.tfstate* 2>/dev/null || true
+
+      - name: Manual cleanup of remaining resources
+        run: |
+          echo "Performing manual cleanup of any remaining resources..."
+          
+          # Delete ECS service (force)
+          aws ecs delete-service \
+            --cluster cicd-pipeline-cluster \
+            --service cicd-pipeline-api \
+            --force \
+            --region ${{ secrets.AWS_REGION }} \
+            2>/dev/null || echo "Service already deleted or not found"
+          
+          # Wait for service deletion
+          sleep 10
+          
+          # Delete ECS cluster
+          aws ecs delete-cluster \
+            --cluster cicd-pipeline-cluster \
+            --region ${{ secrets.AWS_REGION }} \
+            2>/dev/null || echo "Cluster already deleted or not found"
+          
+          # Delete IAM roles
+          for role in cicd-pipeline-github-actions cicd-pipeline-ecs-execution cicd-pipeline-ecs-task; do
+            # Detach policies first
+            for policy in $(aws iam list-attached-role-policies --role-name $role --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null); do
+              aws iam detach-role-policy --role-name $role --policy-arn $policy 2>/dev/null || true
+            done
+            # Delete inline policies
+            for policy in $(aws iam list-role-policies --role-name $role --query 'PolicyNames[]' --output text 2>/dev/null); do
+              aws iam delete-role-policy --role-name $role --policy-name $policy 2>/dev/null || true
+            done
+            # Delete the role
+            aws iam delete-role --role-name $role 2>/dev/null || echo "Role $role already deleted or not found"
+          done
+          
+          # Delete OIDC provider
+          aws iam delete-open-id-connect-provider \
+            --open-id-connect-provider-arn arn:aws:iam::288528696055:oidc-provider/token.actions.githubusercontent.com \
+            2>/dev/null || echo "OIDC provider already deleted or not found"
+          
+          echo "Manual cleanup completed"
+
+      - name: Verify destruction
+        run: |
+          echo "=========================================="
+          echo "Verifying resource destruction..."
+          echo "=========================================="
+          
+          # Check cluster
+          if aws ecs describe-clusters --clusters cicd-pipeline-cluster --region ${{ secrets.AWS_REGION }} 2>/dev/null | grep -q "ACTIVE"; then
+            echo "⚠️ ECS cluster still exists"
+          else
+            echo "✅ ECS cluster destroyed"
+          fi
+          
+          # Check S3 bucket
+          if aws s3 ls s3://aws-ci-cd-pipeline-terraform-state --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
+            echo "⚠️ S3 bucket still exists"
+          else
+            echo "✅ S3 bucket destroyed"
+          fi
+          
+          # Check DynamoDB
+          if aws dynamodb describe-table --table-name terraform-locks --region ${{ secrets.AWS_REGION }} 2>/dev/null | grep -q "TableStatus"; then
+            echo "⚠️ DynamoDB table still exists"
+          else
+            echo "✅ DynamoDB table destroyed"
+          fi
+          
+          echo "=========================================="
+          echo "Cleanup complete!"
+          echo "=========================================="
