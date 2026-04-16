@@ -31,207 +31,247 @@ jobs:
           aws-region:        ${{ secrets.AWS_REGION }}
           role-session-name: github-actions-destroy
 
-      # ── Phase 1: Terraform init ──────────────────────────────────────────────
-      - name: Terraform init
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: terraform init
-
-      # ── Phase 2: Terraform destroy — application infrastructure ──────────────
-      - name: Terraform destroy — appautoscaling
+      # ── Phase 1: Terraform destroy (only if backend still exists) ───────────
+      - name: Check backend and run Terraform destroy
         working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
         run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_appautoscaling_policy.cpu \
-            -target=aws_appautoscaling_target.ecs \
-            -auto-approve -no-color || true
+          if aws s3 ls s3://aws-ci-cd-pipeline-terraform-state \
+              --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
+            echo "✅ Backend exists — running Terraform destroy"
 
-      - name: Terraform destroy — ECS service
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_ecs_service.app \
-            -auto-approve -no-color || true
+            terraform init
 
-      - name: Terraform destroy — ECS cluster and task definitions
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_ecs_cluster_capacity_providers.main \
-            -target=aws_ecs_cluster.main \
-            -target=aws_ecs_task_definition.app \
-            -target=aws_cloudwatch_log_group.ecs \
-            -target=aws_cloudwatch_metric_alarm.alb_5xx \
-            -target=aws_cloudwatch_metric_alarm.ecs_cpu_high \
-            -target=aws_cloudwatch_dashboard.main \
-            -auto-approve -no-color || true
+            # Auto-scaling
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_appautoscaling_policy.cpu \
+              -target=aws_appautoscaling_target.ecs \
+              -auto-approve -no-color 2>/dev/null || true
 
-      - name: Terraform destroy — ALB listeners
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_lb_listener.http \
-            -target=aws_lb_listener.test \
-            -auto-approve -no-color || true
+            # ECS service
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_ecs_service.app \
+              -auto-approve -no-color 2>/dev/null || true
 
-      - name: Terraform destroy — ALB and target groups
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_lb.main \
-            -target=aws_lb_target_group.blue \
-            -target=aws_lb_target_group.green \
-            -auto-approve -no-color || true
+            # ECS cluster capacity providers
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_ecs_cluster_capacity_providers.main \
+              -auto-approve -no-color 2>/dev/null || true
 
-      - name: Terraform destroy — NAT gateway
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_nat_gateway.main \
-            -auto-approve -no-color || true
+            # ECS cluster + task + monitoring
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_ecs_cluster.main \
+              -target=aws_ecs_task_definition.app \
+              -target=aws_cloudwatch_log_group.ecs \
+              -target=aws_cloudwatch_metric_alarm.alb_5xx \
+              -target=aws_cloudwatch_metric_alarm.ecs_cpu_high \
+              -target=aws_cloudwatch_dashboard.main \
+              -auto-approve -no-color 2>/dev/null || true
 
-      - name: Wait for NAT gateway deletion
-        run: echo "Waiting 60s for NAT gateway deletion..." && sleep 60
+            # ALB listeners
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_lb_listener.http \
+              -target=aws_lb_listener.test \
+              -auto-approve -no-color 2>/dev/null || true
 
-      - name: Terraform destroy — EIP
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_eip.nat \
-            -auto-approve -no-color || true
+            # ALB
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_lb.main \
+              -auto-approve -no-color 2>/dev/null || true
 
-      - name: Terraform destroy — route tables and associations
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_route_table_association.public \
-            -target=aws_route_table_association.private \
-            -target=aws_route_table.public \
-            -target=aws_route_table.private \
-            -auto-approve -no-color || true
+            # Target groups
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_lb_target_group.blue \
+              -target=aws_lb_target_group.green \
+              -auto-approve -no-color 2>/dev/null || true
 
-      - name: Terraform destroy — security groups
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_security_group.ecs \
-            -target=aws_security_group.alb \
-            -auto-approve -no-color || true
+            # NAT gateway
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_nat_gateway.main \
+              -auto-approve -no-color 2>/dev/null || true
 
-      - name: Terraform destroy — subnets
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_subnet.private \
-            -target=aws_subnet.public \
-            -auto-approve -no-color || true
+            echo "Waiting 60s for NAT gateway to finish deleting..."
+            sleep 60
 
-      - name: Terraform destroy — internet gateway and VPC
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_internet_gateway.main \
-            -target=aws_vpc.main \
-            -auto-approve -no-color || true
+            # EIP
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_eip.nat \
+              -auto-approve -no-color 2>/dev/null || true
 
-      - name: Terraform destroy — ECR
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_ecr_lifecycle_policy.app \
-            -target=aws_ecr_repository.app \
-            -auto-approve -no-color || true
+            # Route table associations
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_route_table_association.public \
+              -target=aws_route_table_association.private \
+              -auto-approve -no-color 2>/dev/null || true
 
-      - name: Terraform destroy — IAM roles and OIDC
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_iam_role_policy.ecs_task \
-            -target=aws_iam_role_policy_attachment.ecs_execution \
-            -target=aws_iam_role.ecs_task \
-            -target=aws_iam_role.ecs_execution \
-            -target=aws_iam_openid_connect_provider.github \
-            -auto-approve -no-color || true
+            # Route tables
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_route_table.public \
+              -target=aws_route_table.private \
+              -auto-approve -no-color 2>/dev/null || true
 
-      # ── Phase 3: Terraform destroy — state backend ───────────────────────────
-      - name: Terraform destroy — state backend
-        working-directory: ./aws-ci_cd-pipeline-terraform/terraform/
-        run: |
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_s3_bucket_versioning.terraform_state \
-            -target=aws_s3_bucket_server_side_encryption_configuration.terraform_state \
-            -auto-approve -no-color || true
+            # Security groups
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_security_group.ecs \
+              -target=aws_security_group.alb \
+              -auto-approve -no-color 2>/dev/null || true
 
-          terraform destroy \
-            -var="github_org=${{ github.repository_owner }}" \
-            -var="github_repo=${{ github.event.repository.name }}" \
-            -target=aws_s3_bucket.terraform_state \
-            -target=aws_dynamodb_table.terraform_locks \
-            -auto-approve -no-color || true
+            # Subnets
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_subnet.private \
+              -target=aws_subnet.public \
+              -auto-approve -no-color 2>/dev/null || true
 
-      # ── Phase 4: AWS CLI hard-delete for anything Terraform missed ───────────
-      - name: Hard delete — ECR images
-        run: |
-          IMAGES=$(aws ecr list-images \
-            --repository-name cicd-pipeline/api \
-            --region ${{ secrets.AWS_REGION }} \
-            --query 'imageIds' --output json 2>/dev/null || echo "[]")
-          if [ "$IMAGES" != "[]" ] && [ "$IMAGES" != "" ]; then
-            aws ecr batch-delete-image \
-              --repository-name cicd-pipeline/api \
-              --image-ids "$IMAGES" \
-              --region ${{ secrets.AWS_REGION }} || true
+            # Internet gateway
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_internet_gateway.main \
+              -auto-approve -no-color 2>/dev/null || true
+
+            # VPC
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_vpc.main \
+              -auto-approve -no-color 2>/dev/null || true
+
+            # ECR
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_ecr_lifecycle_policy.app \
+              -auto-approve -no-color 2>/dev/null || true
+
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_ecr_repository.app \
+              -auto-approve -no-color 2>/dev/null || true
+
+            # IAM policies
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_iam_role_policy.ecs_task \
+              -target=aws_iam_role_policy_attachment.ecs_execution \
+              -auto-approve -no-color 2>/dev/null || true
+
+            # IAM roles (not github_actions — can't delete the role you're using)
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_iam_role.ecs_task \
+              -target=aws_iam_role.ecs_execution \
+              -auto-approve -no-color 2>/dev/null || true
+
+            # OIDC provider
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_iam_openid_connect_provider.github \
+              -auto-approve -no-color 2>/dev/null || true
+
+            # State backend — point of no return
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_s3_bucket_versioning.terraform_state \
+              -target=aws_s3_bucket_server_side_encryption_configuration.terraform_state \
+              -auto-approve -no-color 2>/dev/null || true
+
+            terraform destroy \
+              -var="github_org=${{ github.repository_owner }}" \
+              -var="github_repo=${{ github.event.repository.name }}" \
+              -target=aws_s3_bucket.terraform_state \
+              -target=aws_dynamodb_table.terraform_locks \
+              -auto-approve -no-color 2>/dev/null || true
+
+          else
+            echo "⏭️  Backend already deleted — skipping Terraform, proceeding to AWS CLI cleanup"
           fi
-          aws ecr delete-repository \
-            --repository-name cicd-pipeline/api \
-            --force \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
 
-      - name: Hard delete — ECS
+      # ── Phase 2: AWS CLI hard-delete (runs regardless, skips if already gone) ──
+
+      - name: Hard delete — ECR
         run: |
-          aws ecs update-service \
-            --cluster cicd-pipeline-cluster \
-            --service cicd-pipeline-api \
-            --desired-count 0 \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
-          sleep 15
-          aws ecs delete-service \
-            --cluster cicd-pipeline-cluster \
-            --service cicd-pipeline-api \
-            --force \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
-          aws ecs delete-cluster \
-            --cluster cicd-pipeline-cluster \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
+          if aws ecr describe-repositories \
+              --repository-names cicd-pipeline/api \
+              --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
+            echo "Deleting ECR repository..."
+            aws ecr delete-repository \
+              --repository-name cicd-pipeline/api \
+              --force \
+              --region ${{ secrets.AWS_REGION }} || true
+          else
+            echo "⏭️  ECR repository already deleted"
+          fi
 
-      - name: Hard delete — Load balancer and target groups
+      - name: Hard delete — ECS service and cluster
+        run: |
+          SERVICE=$(aws ecs describe-services \
+            --cluster cicd-pipeline-cluster \
+            --services cicd-pipeline-api \
+            --region ${{ secrets.AWS_REGION }} \
+            --query 'services[0].status' \
+            --output text 2>/dev/null || echo "INACTIVE")
+          if [ "$SERVICE" != "INACTIVE" ] && [ "$SERVICE" != "None" ] && [ -n "$SERVICE" ]; then
+            echo "Deleting ECS service..."
+            aws ecs update-service \
+              --cluster cicd-pipeline-cluster \
+              --service cicd-pipeline-api \
+              --desired-count 0 \
+              --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
+            sleep 15
+            aws ecs delete-service \
+              --cluster cicd-pipeline-cluster \
+              --service cicd-pipeline-api \
+              --force \
+              --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
+          else
+            echo "⏭️  ECS service already deleted"
+          fi
+
+          CLUSTER=$(aws ecs describe-clusters \
+            --clusters cicd-pipeline-cluster \
+            --region ${{ secrets.AWS_REGION }} \
+            --query 'clusters[0].status' \
+            --output text 2>/dev/null || echo "INACTIVE")
+          if [ "$CLUSTER" = "ACTIVE" ]; then
+            echo "Deleting ECS cluster..."
+            aws ecs delete-cluster \
+              --cluster cicd-pipeline-cluster \
+              --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
+          else
+            echo "⏭️  ECS cluster already deleted"
+          fi
+
+      - name: Hard delete — ALB and target groups
         run: |
           ALB_ARN=$(aws elbv2 describe-load-balancers \
             --names cicd-pipeline-alb \
@@ -239,6 +279,7 @@ jobs:
             --query 'LoadBalancers[0].LoadBalancerArn' \
             --output text 2>/dev/null || echo "")
           if [ -n "$ALB_ARN" ] && [ "$ALB_ARN" != "None" ]; then
+            echo "Deleting ALB listeners..."
             for LISTENER_ARN in $(aws elbv2 describe-listeners \
               --load-balancer-arn "$ALB_ARN" \
               --region ${{ secrets.AWS_REGION }} \
@@ -248,12 +289,16 @@ jobs:
                 --listener-arn "$LISTENER_ARN" \
                 --region ${{ secrets.AWS_REGION }} || true
             done
+            echo "Deleting ALB..."
             aws elbv2 delete-load-balancer \
               --load-balancer-arn "$ALB_ARN" \
               --region ${{ secrets.AWS_REGION }} || true
             echo "Waiting 30s for ALB deletion..."
             sleep 30
+          else
+            echo "⏭️  ALB already deleted"
           fi
+
           for TG_NAME in cicd-pipeline-blue cicd-pipeline-green; do
             TG_ARN=$(aws elbv2 describe-target-groups \
               --names "$TG_NAME" \
@@ -261,33 +306,47 @@ jobs:
               --query 'TargetGroups[0].TargetGroupArn' \
               --output text 2>/dev/null || echo "")
             if [ -n "$TG_ARN" ] && [ "$TG_ARN" != "None" ]; then
+              echo "Deleting target group $TG_NAME..."
               aws elbv2 delete-target-group \
                 --target-group-arn "$TG_ARN" \
                 --region ${{ secrets.AWS_REGION }} || true
+            else
+              echo "⏭️  Target group $TG_NAME already deleted"
             fi
           done
 
       - name: Hard delete — NAT gateway and EIP
         run: |
           NAT_ID=$(aws ec2 describe-nat-gateways \
+            --filter \
+              "Name=state,Values=available,pending" \
+              "Name=tag:Project,Values=cicd-pipeline" \
             --region ${{ secrets.AWS_REGION }} \
-            --query 'NatGateways[?Tags[?Key==`Project`&&Value==`cicd-pipeline`]].NatGatewayId' \
+            --query 'NatGateways[0].NatGatewayId' \
             --output text 2>/dev/null || echo "")
           if [ -n "$NAT_ID" ] && [ "$NAT_ID" != "None" ]; then
+            echo "Deleting NAT gateway $NAT_ID..."
             aws ec2 delete-nat-gateway \
               --nat-gateway-id "$NAT_ID" \
               --region ${{ secrets.AWS_REGION }} || true
             echo "Waiting 60s for NAT gateway deletion..."
             sleep 60
+          else
+            echo "⏭️  NAT gateway already deleted"
           fi
+
           EIP_ALLOC=$(aws ec2 describe-addresses \
+            --filters "Name=tag:Project,Values=cicd-pipeline" \
             --region ${{ secrets.AWS_REGION }} \
-            --query 'Addresses[?Tags[?Key==`Project`&&Value==`cicd-pipeline`]].AllocationId' \
+            --query 'Addresses[0].AllocationId' \
             --output text 2>/dev/null || echo "")
           if [ -n "$EIP_ALLOC" ] && [ "$EIP_ALLOC" != "None" ]; then
+            echo "Releasing EIP $EIP_ALLOC..."
             aws ec2 release-address \
               --allocation-id "$EIP_ALLOC" \
               --region ${{ secrets.AWS_REGION }} || true
+          else
+            echo "⏭️  EIP already released"
           fi
 
       - name: Hard delete — VPC and networking
@@ -298,7 +357,7 @@ jobs:
             --query 'Vpcs[0].VpcId' \
             --output text 2>/dev/null || echo "")
           if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
-            echo "VPC already deleted, skipping"
+            echo "⏭️  VPC already deleted"
             exit 0
           fi
           echo "Cleaning up VPC: $VPC_ID"
@@ -308,6 +367,7 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --query 'SecurityGroups[?GroupName!=`default`].GroupId' \
             --output text 2>/dev/null); do
+            echo "Deleting security group $SG_ID..."
             aws ec2 delete-security-group \
               --group-id "$SG_ID" \
               --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
@@ -318,6 +378,7 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --query 'Subnets[].SubnetId' \
             --output text 2>/dev/null); do
+            echo "Deleting subnet $SUBNET_ID..."
             aws ec2 delete-subnet \
               --subnet-id "$SUBNET_ID" \
               --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
@@ -326,8 +387,9 @@ jobs:
           for RT_ID in $(aws ec2 describe-route-tables \
             --filters "Name=vpc-id,Values=$VPC_ID" \
             --region ${{ secrets.AWS_REGION }} \
-            --query 'RouteTables[?Associations[?Main!=`true`]||!Associations].RouteTableId' \
+            --query 'RouteTables[?Associations[?Main==`false`]||length(Associations)==`0`].RouteTableId' \
             --output text 2>/dev/null); do
+            echo "Deleting route table $RT_ID..."
             aws ec2 delete-route-table \
               --route-table-id "$RT_ID" \
               --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
@@ -338,6 +400,7 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --query 'InternetGateways[].InternetGatewayId' \
             --output text 2>/dev/null); do
+            echo "Deleting internet gateway $IGW_ID..."
             aws ec2 detach-internet-gateway \
               --internet-gateway-id "$IGW_ID" \
               --vpc-id "$VPC_ID" \
@@ -347,80 +410,127 @@ jobs:
               --region ${{ secrets.AWS_REGION }} || true
           done
 
+          echo "Deleting VPC $VPC_ID..."
           aws ec2 delete-vpc \
             --vpc-id "$VPC_ID" \
             --region ${{ secrets.AWS_REGION }} || true
 
-      - name: Hard delete — IAM roles and OIDC
+      - name: Hard delete — IAM roles
         run: |
           for ROLE in cicd-pipeline-ecs-execution cicd-pipeline-ecs-task cicd-pipeline-github-actions; do
-            for POLICY_ARN in $(aws iam list-attached-role-policies \
-              --role-name "$ROLE" \
-              --query 'AttachedPolicies[].PolicyArn' \
-              --output text 2>/dev/null); do
-              aws iam detach-role-policy \
+            if aws iam get-role --role-name "$ROLE" 2>/dev/null; then
+              echo "Deleting role $ROLE..."
+              for POLICY_ARN in $(aws iam list-attached-role-policies \
                 --role-name "$ROLE" \
-                --policy-arn "$POLICY_ARN" 2>/dev/null || true
-            done
-            for POLICY_NAME in $(aws iam list-role-policies \
-              --role-name "$ROLE" \
-              --query 'PolicyNames[]' \
-              --output text 2>/dev/null); do
-              aws iam delete-role-policy \
+                --query 'AttachedPolicies[].PolicyArn' \
+                --output text 2>/dev/null); do
+                aws iam detach-role-policy \
+                  --role-name "$ROLE" \
+                  --policy-arn "$POLICY_ARN" 2>/dev/null || true
+              done
+              for POLICY_NAME in $(aws iam list-role-policies \
                 --role-name "$ROLE" \
-                --policy-name "$POLICY_NAME" 2>/dev/null || true
-            done
-            aws iam delete-role --role-name "$ROLE" 2>/dev/null || true
+                --query 'PolicyNames[]' \
+                --output text 2>/dev/null); do
+                aws iam delete-role-policy \
+                  --role-name "$ROLE" \
+                  --policy-name "$POLICY_NAME" 2>/dev/null || true
+              done
+              aws iam delete-role --role-name "$ROLE" 2>/dev/null || true
+              echo "✅ Deleted role: $ROLE"
+            else
+              echo "⏭️  Role $ROLE already deleted"
+            fi
           done
 
-          aws iam delete-open-id-connect-provider \
-            --open-id-connect-provider-arn \
-            arn:aws:iam::288528696055:oidc-provider/token.actions.githubusercontent.com \
-            2>/dev/null || true
+          if aws iam get-open-id-connect-provider \
+              --open-id-connect-provider-arn \
+              arn:aws:iam::288528696055:oidc-provider/token.actions.githubusercontent.com \
+              2>/dev/null; then
+            echo "Deleting OIDC provider..."
+            aws iam delete-open-id-connect-provider \
+              --open-id-connect-provider-arn \
+              arn:aws:iam::288528696055:oidc-provider/token.actions.githubusercontent.com \
+              2>/dev/null || true
+          else
+            echo "⏭️  OIDC provider already deleted"
+          fi
 
-      - name: Hard delete — S3 and DynamoDB
+      - name: Hard delete — S3 state bucket and DynamoDB
         run: |
-          aws s3 rm s3://aws-ci-cd-pipeline-terraform-state \
-            --recursive \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
-          aws s3api delete-objects \
-            --bucket aws-ci-cd-pipeline-terraform-state \
-            --delete "$(aws s3api list-object-versions \
+          if aws s3 ls s3://aws-ci-cd-pipeline-terraform-state \
+              --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
+            echo "Emptying versioned S3 bucket..."
+            # Delete all versions
+            VERSIONS=$(aws s3api list-object-versions \
               --bucket aws-ci-cd-pipeline-terraform-state \
               --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' \
-              --output json 2>/dev/null)" \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
-          aws s3api delete-objects \
-            --bucket aws-ci-cd-pipeline-terraform-state \
-            --delete "$(aws s3api list-object-versions \
+              --output json 2>/dev/null)
+            if [ "$VERSIONS" != "null" ] && [ -n "$VERSIONS" ] && \
+               [ "$(echo $VERSIONS | jq '.Objects | length')" -gt 0 ]; then
+              aws s3api delete-objects \
+                --bucket aws-ci-cd-pipeline-terraform-state \
+                --delete "$VERSIONS" \
+                --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
+            fi
+            # Delete all delete markers
+            MARKERS=$(aws s3api list-object-versions \
               --bucket aws-ci-cd-pipeline-terraform-state \
               --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
-              --output json 2>/dev/null)" \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
-          aws s3 rb s3://aws-ci-cd-pipeline-terraform-state \
-            --force \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
+              --output json 2>/dev/null)
+            if [ "$MARKERS" != "null" ] && [ -n "$MARKERS" ] && \
+               [ "$(echo $MARKERS | jq '.Objects | length')" -gt 0 ]; then
+              aws s3api delete-objects \
+                --bucket aws-ci-cd-pipeline-terraform-state \
+                --delete "$MARKERS" \
+                --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
+            fi
+            echo "Deleting S3 bucket..."
+            aws s3 rb s3://aws-ci-cd-pipeline-terraform-state \
+              --force \
+              --region ${{ secrets.AWS_REGION }} || true
+          else
+            echo "⏭️  S3 bucket already deleted"
+          fi
 
-          aws dynamodb delete-table \
-            --table-name terraform-locks \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
+          if aws dynamodb describe-table \
+              --table-name terraform-locks \
+              --region ${{ secrets.AWS_REGION }} 2>/dev/null; then
+            echo "Deleting DynamoDB table..."
+            aws dynamodb delete-table \
+              --table-name terraform-locks \
+              --region ${{ secrets.AWS_REGION }} || true
+          else
+            echo "⏭️  DynamoDB table already deleted"
+          fi
 
-      - name: Hard delete — CloudWatch and logs
+      - name: Hard delete — CloudWatch
         run: |
-          aws logs delete-log-group \
-            --log-group-name /ecs/cicd-pipeline \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
+          if aws logs describe-log-groups \
+              --log-group-name-prefix /ecs/cicd-pipeline \
+              --region ${{ secrets.AWS_REGION }} \
+              --query 'logGroups[0].logGroupName' \
+              --output text 2>/dev/null | grep -q cicd; then
+            echo "Deleting log group..."
+            aws logs delete-log-group \
+              --log-group-name /ecs/cicd-pipeline \
+              --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
+          else
+            echo "⏭️  Log group already deleted"
+          fi
+
           for ALARM in cicd-pipeline-5xx-errors cicd-pipeline-ecs-cpu-high; do
             aws cloudwatch delete-alarms \
               --alarm-names "$ALARM" \
               --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
           done
+
           aws cloudwatch delete-dashboards \
             --dashboard-names cicd-pipeline-overview \
             --region ${{ secrets.AWS_REGION }} 2>/dev/null || true
 
-      # ── Phase 5: Final verification ──────────────────────────────────────────
-      - name: Verify all resources deleted
+      # ── Final verification ───────────────────────────────────────────────────
+      - name: Final verification
         run: |
           echo "=========================================="
           echo "Final verification"
@@ -432,30 +542,44 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --query 'LoadBalancers[0].State.Code' \
             --output text 2>/dev/null || echo "deleted")
-          [ "$ALB" = "deleted" ] && echo "✅ ALB gone" || { echo "❌ ALB still exists: $ALB"; ISSUES=$((ISSUES+1)); }
+          [ "$ALB" = "deleted" ] || [ -z "$ALB" ] || [ "$ALB" = "None" ] \
+            && echo "✅ ALB gone" \
+            || { echo "❌ ALB still exists: $ALB"; ISSUES=$((ISSUES+1)); }
 
           VPC=$(aws ec2 describe-vpcs \
             --filters "Name=cidr,Values=10.1.0.0/16" \
             --region ${{ secrets.AWS_REGION }} \
             --query 'Vpcs[0].VpcId' \
             --output text 2>/dev/null || echo "None")
-          [ "$VPC" = "None" ] && echo "✅ VPC gone" || { echo "❌ VPC still exists: $VPC"; ISSUES=$((ISSUES+1)); }
+          [ "$VPC" = "None" ] || [ -z "$VPC" ] \
+            && echo "✅ VPC gone" \
+            || { echo "❌ VPC still exists: $VPC"; ISSUES=$((ISSUES+1)); }
 
           BUCKET=$(aws s3 ls s3://aws-ci-cd-pipeline-terraform-state \
-            --region ${{ secrets.AWS_REGION }} 2>/dev/null && echo "exists" || echo "deleted")
-          [ "$BUCKET" = "deleted" ] && echo "✅ S3 bucket gone" || { echo "❌ S3 bucket still exists"; ISSUES=$((ISSUES+1)); }
+            --region ${{ secrets.AWS_REGION }} 2>/dev/null \
+            && echo "exists" || echo "deleted")
+          [ "$BUCKET" = "deleted" ] \
+            && echo "✅ S3 bucket gone" \
+            || { echo "❌ S3 bucket still exists"; ISSUES=$((ISSUES+1)); }
 
           CLUSTER=$(aws ecs describe-clusters \
             --clusters cicd-pipeline-cluster \
             --region ${{ secrets.AWS_REGION }} \
             --query 'clusters[0].status' \
             --output text 2>/dev/null || echo "INACTIVE")
-          [ "$CLUSTER" = "INACTIVE" ] || [ -z "$CLUSTER" ] \
+          [ "$CLUSTER" = "INACTIVE" ] || [ -z "$CLUSTER" ] || [ "$CLUSTER" = "None" ] \
             && echo "✅ ECS cluster gone" \
             || { echo "❌ ECS cluster still exists: $CLUSTER"; ISSUES=$((ISSUES+1)); }
+
+          ROLE_COUNT=$(aws iam list-roles \
+            --query 'Roles[?contains(RoleName,`cicd-pipeline`)].RoleName' \
+            --output text 2>/dev/null | wc -w || echo "0")
+          [ "$ROLE_COUNT" -eq 0 ] \
+            && echo "✅ IAM roles gone" \
+            || { echo "❌ $ROLE_COUNT IAM role(s) still exist"; ISSUES=$((ISSUES+1)); }
 
           echo "=========================================="
           [ "$ISSUES" -eq 0 ] \
             && echo "✅ All resources successfully destroyed" \
-            || echo "⚠️  $ISSUES resource(s) may need manual cleanup in AWS console"
+            || echo "⚠️  $ISSUES resource(s) may still exist — check AWS console"
           echo "=========================================="
