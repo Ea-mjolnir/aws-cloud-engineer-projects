@@ -1,0 +1,59 @@
+# Production-specific overrides
+
+replicaCount: 3
+
+image:
+  tag: "stable"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/eks-platform-production-task-api"
+
+ingress:
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/UUID"
+    alb.ingress.kubernetes.io/ssl-policy: "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  hosts:
+    - host: "api.eks-platform.example.com"
+
+autoscaling:
+  minReplicas: 3
+  maxReplicas: 30
+
+podDisruptionBudget:
+  minAvailable: 2
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu:    "200m"
+  limits:
+    memory: "1Gi"
+    cpu:    "1000m"
+
+env:
+  ENVIRONMENT: production
+  LOG_LEVEL:   WARN
+
+nodeSelector:
+  role: apps
+  "eks.amazonaws.com/capacityType": "ON_DEMAND"  # Prefer on-demand in production
+
+tolerations:
+  - key: "spot"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+  - key: "production"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+priorityClassName: "high-priority"
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port:   "8080"
+  prometheus.io/path:   "/metrics"
+  backup.velero.io/backup-volumes: "tmp,data"

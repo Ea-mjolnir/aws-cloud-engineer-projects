@@ -1,0 +1,111 @@
+name: Build, Scan & Deploy to EKS
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "aws-eks-platform-terraform/helm/**"
+      - "aws-eks-platform-terraform/app/**"
+      - "aws-eks-platform-terraform/src/**"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "aws-eks-platform-terraform/helm/**"
+      - "aws-eks-platform-terraform/app/**"
+
+permissions:
+  contents: read
+  id-token: write
+  security-events: write
+  pull-requests: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 288528696055.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REPOSITORY: eks-platform/task-api
+  EKS_CLUSTER: eks-platform-production-cluster
+  TASK_API_ROLE_ARN: arn:aws:iam::288528696055:role/eks-platform-production-task-api
+  WORKING_DIR: aws-eks-platform-terraform
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-eks-deploy
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: meta
+        run: |
+          TAG="v${{ github.run_number }}-$(echo ${{ github.sha }} | cut -c1-7)"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }} \
+            -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest \
+            -f app/Dockerfile app/
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ env.EKS_CLUSTER }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Helm upgrade
+        run: |
+          cd ${{ env.WORKING_DIR }}
+          helm upgrade --install task-api helm/task-api/ \
+            --namespace production \
+            --create-namespace \
+            --values helm/task-api/values.yaml \
+            --values helm/task-api/values-production.yaml \
+            --set image.repository="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}" \
+            --set image.tag="${{ steps.meta.outputs.tag }}" \
+            --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=${{ env.TASK_API_ROLE_ARN }}" \
+            --wait \
+            --timeout 10m \
+            --atomic
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/task-api -n production --timeout=300s
+          kubectl get pods -n production -l app.kubernetes.io/name=task-api
+        working-directory: ${{ env.WORKING_DIR }}

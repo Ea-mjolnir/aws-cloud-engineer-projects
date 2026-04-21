@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "task-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "task-api.labels" . | nindent 4 }}
+data:
+  # Application configuration
+  config.yaml: |
+    app:
+      name: {{ include "task-api.fullname" . }}
+      environment: {{ .Values.env.ENVIRONMENT | default "production" }}
+      log_level: {{ .Values.env.LOG_LEVEL | default "INFO" }}
+    
+    aws:
+      region: {{ .Values.env.AWS_REGION | default "us-east-1" }}
+      dynamodb_table: {{ .Values.env.DYNAMODB_TABLE | default "eks-tasks" }}
+    
+    server:
+      port: {{ .Values.service.targetPort }}
+      workers: 4
+    
+    monitoring:
+      metrics_enabled: {{ .Values.env.METRICS_ENABLED | default "true" }}
+      tracing_enabled: {{ .Values.env.TRACING_ENABLED | default "false" }}

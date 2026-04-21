@@ -1,0 +1,33 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    app.kubernetes.io/part-of: gitops
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-repo-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  type: git
+  url: https://github.com/Ea-mjolnir/aws-cloud-engineer-projects
+  username: Ea-mjolnir
+  password: YOUR_GITHUB_TOKEN_HERE
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: eks-platform-repo-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  type: git
+  url: https://github.com/Ea-mjolnir/aws-eks-platform-terraform
+  username: Ea-mjolnir
+  password: YOUR_GITHUB_TOKEN_HERE

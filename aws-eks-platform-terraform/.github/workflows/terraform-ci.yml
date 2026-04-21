@@ -1,0 +1,146 @@
+name: Terraform Plan & Apply
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-ci.yml"
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  AWS_REGION: us-east-1
+  ENVIRONMENT: production
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Terraform Plan (runs on PR)
+  # --------------------------------------------------------------------------
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive terraform/
+      
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init -upgrade
+      
+      - name: Terraform Validate
+        run: |
+          cd terraform
+          terraform validate
+      
+      - name: Terraform Plan
+        id: plan
+        run: |
+          cd terraform
+          terraform plan \
+            -var="github_org=Ea-mjolnir" \
+            -var="environment=${{ env.ENVIRONMENT }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -no-color \
+            -out=tfplan
+          
+          terraform show -no-color tfplan > plan.txt
+      
+      - name: Comment PR with Plan
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('terraform/plan.txt', 'utf8');
+            
+            const body = `### 🌍 Terraform Plan
+            <details>
+            <summary>Click to expand</summary>
+            
+            \`\`\`terraform
+            ${plan.substring(0, 50000)}
+            ${plan.length > 50000 ? '\n... (truncated)' : ''}
+            \`\`\`
+            </details>
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+  # --------------------------------------------------------------------------
+  # Terraform Apply (runs on push to main)
+  # --------------------------------------------------------------------------
+  apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init -upgrade
+      
+      - name: Terraform Apply
+        run: |
+          cd terraform
+          terraform apply \
+            -var="github_org=Ea-mjolnir" \
+            -var="environment=${{ env.ENVIRONMENT }}" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -auto-approve
+      
+      - name: Get Outputs
+        id: outputs
+        run: |
+          cd terraform
+          echo "cluster_name=$(terraform output -raw cluster_name)" >> $GITHUB_OUTPUT
+          echo "cluster_endpoint=$(terraform output -raw cluster_endpoint)" >> $GITHUB_OUTPUT
+      
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ steps.outputs.outputs.cluster_name }} \
+            --region ${{ env.AWS_REGION }}
+          kubectl get nodes

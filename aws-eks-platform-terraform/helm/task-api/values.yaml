@@ -1,0 +1,197 @@
+# Default values for task-api
+# This is a YAML-formatted file
+# Declare variables to be passed into your templates
+
+replicaCount: 2
+
+image:
+  repository: ""    # Injected by CI/CD pipeline (e.g., 123456789.dkr.ecr.us-east-1.amazonaws.com/task-api)
+  tag: "latest"
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: "task-api"
+
+serviceAccount:
+  create: true
+  name: "task-api"
+  annotations:
+    eks.amazonaws.com/role-arn: ""   # IRSA ARN injected by CI/CD
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health/live
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+    alb.ingress.kubernetes.io/load-balancer-attributes: |
+      idle_timeout.timeout_seconds=60,
+      routing.http2.enabled=true,
+      deletion_protection.enabled=true
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}, {"HTTP":80}]'
+    alb.ingress.kubernetes.io/certificate-arn: ""  # ACM cert ARN injected per environment
+  hosts:
+    - host: ""       # Injected per environment (e.g., api.eks-platform.example.com)
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []            # Managed by ALB, not ingress TLS
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu:    "100m"
+  limits:
+    memory: "512Mi"
+    cpu:    "500m"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1   # Always keep at least 1 pod running during node drains
+
+# Environment variables (non-sensitive)
+env:
+  ENVIRONMENT:    production
+  AWS_REGION:     us-east-1
+  DYNAMODB_TABLE: eks-tasks
+  LOG_LEVEL:      INFO
+  METRICS_ENABLED: "true"
+  TRACING_ENABLED: "false"
+
+# Secrets mounted from External Secrets Operator
+secrets:
+  enabled: true
+  secretName: task-api-secrets
+
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds:       15
+  timeoutSeconds:      5
+  failureThreshold:    3
+  successThreshold:    1
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds:       10
+  timeoutSeconds:      5
+  failureThreshold:    3
+  successThreshold:    1
+
+startupProbe:
+  httpGet:
+    path: /health/ready
+    port: 8080
+  initialDelaySeconds: 0
+  periodSeconds:       5
+  timeoutSeconds:      5
+  failureThreshold:    30   # 5s * 30 = 150s max startup time
+
+# Pod Security Context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser:    1000
+  runAsGroup:   1000
+  fsGroup:      1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container Security Context
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem:   true
+  runAsNonRoot:             true
+  runAsUser:                1000
+  capabilities:
+    drop: ["ALL"]
+
+nodeSelector:
+  role: apps
+
+tolerations:
+  - key: "spot"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: ["task-api"]
+          topologyKey: kubernetes.io/hostname   # Spread across nodes
+
+# Pod Topology Spread Constraints (K8s 1.19+)
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: task-api
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics
+  port: http
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port:   "8080"
+  prometheus.io/path:   "/metrics"
+  
+# Deployment strategy
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge:       1
+    maxUnavailable: 0    # Zero-downtime — always spin up new before killing old
+
+# Termination grace period
+terminationGracePeriodSeconds: 60
+
+# Priority class (prevents eviction of critical pods)
+priorityClassName: ""  # Set to "high-priority" for production

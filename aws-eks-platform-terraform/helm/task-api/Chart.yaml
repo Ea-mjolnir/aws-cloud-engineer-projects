@@ -1,0 +1,16 @@
+apiVersion: v2
+name: task-api
+description: Task Management API — production Helm chart with HPA, PDB, and IRSA
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - task-api
+  - fastapi
+  - aws
+  - eks
+  - gitops
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+icon: https://kubernetes.io/images/kubernetes.png
