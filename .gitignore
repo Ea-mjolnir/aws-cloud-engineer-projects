@@ -21,3 +21,14 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Terraform state and backups (NEVER commit these!)
+*.tfstate
+*.tfstate.*
+*.backup
+*.bak
+*~
+
+# Project-specific
+create-structure.sh
+test-*.sh
