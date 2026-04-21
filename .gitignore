@@ -32,3 +32,10 @@ __pycache__/
 # Project-specific
 create-structure.sh
 test-*.sh
+
+# TERRAFORM STATE FILES - NEVER COMMIT THESE!
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
