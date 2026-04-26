@@ -208,14 +208,8 @@ resource "aws_eks_node_group" "main" {
     max_unavailable_percentage = lookup(each.value.update_config, "max_unavailable_percentage", 33)
   }
 
-  labels = merge(
-    each.value.labels,
-    {
-      "eks.amazonaws.com/nodegroup"    = "${local.node_group_name_prefix}-${each.key}"
-      "eks.amazonaws.com/capacityType" = each.value.capacity_type
-      "node.kubernetes.io/lifecycle"   = lower(each.value.capacity_type)
-    }
-  )
+  # Only use custom labels - AWS adds its own reserved labels automatically
+  labels = each.value.labels
 
   dynamic "taint" {
     for_each = each.value.taints
@@ -236,9 +230,8 @@ resource "aws_eks_node_group" "main" {
 
   tags = merge(
     {
-      "k8s.io/cluster-autoscaler/enabled"                                            = "true"
-      "k8s.io/cluster-autoscaler/${local.cluster_name}"                              = "owned"
-      "k8s.io/cluster-autoscaler/node-template/label/eks.amazonaws.com/capacityType" = each.value.capacity_type
+      "k8s.io/cluster-autoscaler/enabled"               = "true"
+      "k8s.io/cluster-autoscaler/${local.cluster_name}" = "owned"
     },
     local.common_tags
   )
